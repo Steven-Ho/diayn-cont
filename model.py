@@ -31,12 +31,12 @@ class ValueNetwork(nn.Module):
         return x
 
 class Discriminator(nn.Module):
-    def __init__(self, num_inputs, num_skills, hidden_dim):
+    def __init__(self, num_inputs, hidden_dim):
         super(Discriminator, self).__init__()
 
         self.linear1 = nn.Linear(num_inputs, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear3 = nn.Linear(hidden_dim, num_skills)
+        self.linear3 = nn.Linear(hidden_dim, 1)
 
         self.apply(weights_init_)
 
@@ -44,6 +44,7 @@ class Discriminator(nn.Module):
         x = F.relu(self.linear1(state))
         x = F.relu(self.linear2(x))
         x = self.linear3(x)
+        x = 2 * F.tanh(x) # TBD
 
         return x # score, unnormalized
 

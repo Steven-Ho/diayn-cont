@@ -6,7 +6,7 @@ import itertools
 import torch
 from sac import SAC
 from tensorboardX import SummaryWriter
-from replay_memory import ReplayMemory, Buffer
+from replay_memory import ReplayMemory
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
 parser.add_argument('--env-name', default="HalfCheetah-v2",
@@ -15,8 +15,6 @@ parser.add_argument('--policy', default="Gaussian",
                     help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
 parser.add_argument('--eval', type=bool, default=True,
                     help='Evaluates a policy a policy every 10 episode (default: True)')
-parser.add_argument('--num_skills', type=int, default=10,
-                    help='Number of skills to learn')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
                     help='discount factor for reward (default: 0.99)')
 parser.add_argument('--tau', type=float, default=0.05, metavar='G',
@@ -66,7 +64,6 @@ writer = SummaryWriter(logdir='runs/{}_SAC_{}_{}_{}'.format(datetime.datetime.no
 
 # Memory
 memory = ReplayMemory(args.replay_size)
-buffer = Buffer(args.buffer_size)
 
 # Training Loop
 total_numsteps = 0
@@ -79,9 +76,8 @@ for i_episode in itertools.count(1):
     done = False
     state = env.reset()
 
-    context_index = np.random.randint(0, high=args.num_skills)
-    context = np.zeros(args.num_skills)
-    context[context_index] = 1.
+    context = np.random.random(1)
+    context = context * 2 - 1. # scale to [-1, 1)
     while not done:
         if args.start_steps > total_numsteps:
             action = env.action_space.sample()  # Sample random action
@@ -107,8 +103,8 @@ for i_episode in itertools.count(1):
         total_numsteps += 1
         episode_reward += reward
 
-        state_prob = agent.state_prob(context, state)
-        pseudo_reward = np.log(max(state_prob, 1E-6)) + np.log(args.num_skills)
+        pseudo_reward = agent.pseudo_score(context, state)
+
         episode_sr += pseudo_reward
 
         # Ignore the "done" signal if it comes from hitting the time horizon.
@@ -138,22 +134,21 @@ for i_episode in itertools.count(1):
     if i_episode % 10 == 0 and args.eval == True:
         avg_reward = 0.
         avg_sr = 0.
-        episodes = args.num_skills
+        episodes = 10
+        context = np.random.random([10, 1])
         for i  in range(episodes):
             state = env.reset()
             episode_reward = 0
             episode_sr = 0
             done = False
-            context = np.zeros(args.num_skills)
-            context[i] = 1.
+            
             while not done:
-                action = agent.select_action(state, context, eval=True)
+                action = agent.select_action(state, context[i], eval=True)
 
                 next_state, reward, done, _ = env.step(action)
                 episode_reward += reward
 
-                state_prob = agent.state_prob(context, next_state)
-                pseudo_reward = np.log(max(state_prob, 1E-6)) + np.log(args.num_skills)
+                pseudo_reward = agent.pseudo_score(context[i], state)
                 episode_sr += pseudo_reward
 
                 state = next_state
