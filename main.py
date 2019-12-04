@@ -7,9 +7,11 @@ import torch
 from sac import SAC
 from tensorboardX import SummaryWriter
 from replay_memory import ReplayMemory
+from gym_navigation.envs.navigation import ContinuousNavigation2DEnv
+import cv2
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
-parser.add_argument('--env-name', default="HalfCheetah-v2",
+parser.add_argument('--env-name', default="2d-navigation-v0",
                     help='Mujoco Gym environment (default: HalfCheetah-v2)')
 parser.add_argument('--policy', default="Gaussian",
                     help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
@@ -73,6 +75,7 @@ for i_episode in itertools.count(1):
     episode_reward = 0
     episode_steps = 0
     episode_sr = 0 # pseudo reward
+    episode_allr = 0 # all rewards
     done = False
     state = env.reset()
 
@@ -107,11 +110,14 @@ for i_episode in itertools.count(1):
 
         episode_sr += pseudo_reward
 
+        all_reward = pseudo_reward + reward
+        episode_allr += all_reward
+
         # Ignore the "done" signal if it comes from hitting the time horizon.
         # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
         mask = 1 if episode_steps == env._max_episode_steps else float(not done)
 
-        memory.push(context, state, action, pseudo_reward, next_state, mask) # Append transition to memory
+        memory.push(context, state, action, all_reward, next_state, mask) # Append transition to memory
         # buffer.push(state, context)
 
         state = next_state
@@ -121,7 +127,8 @@ for i_episode in itertools.count(1):
 
     writer.add_scalar('reward/train', episode_reward, i_episode)
     writer.add_scalar('reward/train_pseudo', episode_sr, i_episode)
-    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}, sr: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), round(episode_sr, 2)))
+    writer.add_scalar('reward/train_all', episode_allr, i_episode)
+    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}, sr: {}, all: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), round(episode_sr, 2), round(episode_allr, 2)))
 
     # if i_episode > 10:
     #     disc_loss, disc_loss_old = agent.update_disc(buffer, args.batch_size * 10, steps=50)    
@@ -134,12 +141,17 @@ for i_episode in itertools.count(1):
     if i_episode % 10 == 0 and args.eval == True:
         avg_reward = 0.
         avg_sr = 0.
-        episodes = 10
-        context = np.random.random([10, 1])
+        avg_all = 0.
+        episodes = 20
+        context = np.linspace(-1.0, 1.0, num=episodes)
+        context = np.expand_dims(context, axis=1)
         for i  in range(episodes):
             state = env.reset()
+            traj = []
+            traj.append([state, None, 0.0, False])
             episode_reward = 0
             episode_sr = 0
+            episode_allr = 0
             done = False
             
             while not done:
@@ -147,19 +159,25 @@ for i_episode in itertools.count(1):
 
                 next_state, reward, done, _ = env.step(action)
                 episode_reward += reward
+                traj.append([next_state, action, reward, done])
 
                 pseudo_reward = agent.pseudo_score(context[i], state)
                 episode_sr += pseudo_reward
 
+                episode_allr += (pseudo_reward + reward)
                 state = next_state
             avg_reward += episode_reward
             avg_sr += episode_sr
+            avg_all += episode_allr
+            img = env._render_trajectory(traj)
+            cv2.imwrite("runs/png/{}-{}.png".format(i, context[i]), img * 255.0)
         avg_reward /= episodes
         avg_sr /= episodes
-
+        avg_all /= episodes
 
         writer.add_scalar('avg_reward/test', avg_reward, i_episode)
         writer.add_scalar('avg_reward/test_pseudo', avg_sr, i_episode)
+        writer.add_scalar('avg_reward/test_all', avg_all, i_episode)
 
         print("----------------------------------------")
         print("Test Episodes: {}, Avg. Reward: {}, Avg. SR: {}".format(episodes, round(avg_reward, 2), round(avg_sr, 2)))

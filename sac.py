@@ -26,7 +26,7 @@ class SAC(object):
         hard_update(self.critic_target, self.critic)
 
         self.disc = Discriminator(num_inputs, args.hidden_size).to(device=self.device)
-        self.disc_optim = Adam(self.disc.parameters(), lr=args.lr)
+        self.disc_optim = Adam(self.disc.parameters(), lr=args.lr/50.)
 
         self.disc_target = Discriminator(num_inputs, args.hidden_size).to(device=self.device)
         hard_update(self.disc_target, self.disc)
@@ -61,6 +61,8 @@ class SAC(object):
         context = torch.FloatTensor(context).to(self.device).unsqueeze(0)
         mu = self.disc_target(state)
         score = - torch.pow(context - mu, 2)
+        # score = - torch.abs(context - mu) # No significant improvement
+        
         return score.detach().cpu().numpy()[0][0]
 
     def update_parameters(self, memory, batch_size, updates):
@@ -93,6 +95,7 @@ class SAC(object):
 
         prediction = self.disc(state_batch)
         disc_loss = F.mse_loss(prediction, context_batch)
+        # disc_loss = F.l1_loss(prediction, context_batch) # No significant improvement
 
         self.disc_optim.zero_grad()
         disc_loss.backward()
