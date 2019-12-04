@@ -134,7 +134,7 @@ class SAC(object):
         return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), disc_loss.item(), alpha_loss.item(), alpha_tlogs.item()
 
     # Save model parameters
-    def save_model(self, env_name, suffix="", actor_path=None, critic_path=None):
+    def save_model(self, env_name, suffix="", actor_path=None, critic_path=None, disc_path=None):
         if not os.path.exists('models/'):
             os.makedirs('models/')
 
@@ -142,15 +142,29 @@ class SAC(object):
             actor_path = "models/sac_actor_{}_{}".format(env_name, suffix)
         if critic_path is None:
             critic_path = "models/sac_critic_{}_{}".format(env_name, suffix)
-        print('Saving models to {} and {}'.format(actor_path, critic_path))
+        if disc_path is None:
+            disc_path = "models/disc_{}_{}".format(env_name, suffix) 
+        print('Saving models to {}, {} and {}'.format(actor_path, critic_path, disc_path))
         torch.save(self.policy.state_dict(), actor_path)
         torch.save(self.critic.state_dict(), critic_path)
+        torch.save(self.disc.state_dict(), disc_path)
     
     # Load model parameters
-    def load_model(self, actor_path, critic_path):
-        print('Loading models from {} and {}'.format(actor_path, critic_path))
+    def load_model(self, actor_path=None, critic_path=None, disc_path=None, env_name=None, suffix=""):
+        print('Loading models from {}, {} and {}'.format(actor_path, critic_path, disc_path))
         if actor_path is not None:
+            self.policy.load_state_dict(torch.load(actor_path))
+        elif env_name is not None:
+            actor_path = "models/sac_actor_{}_{}".format(env_name, suffix)
             self.policy.load_state_dict(torch.load(actor_path))
         if critic_path is not None:
             self.critic.load_state_dict(torch.load(critic_path))
+        elif env_name is not None:
+            critic_path = "models/sac_critic_{}_{}".format(env_name, suffix)
+            self.critic.load_state_dict(torch.load(critic_path))
+        if disc_path is not None:
+            self.disc.load_state_dict(torch.load(disc_path))
+        elif env_name is not None:
+            disc_path = "models/disc_{}_{}".format(env_name, suffix) 
+            self.disc.load_state_dict(torch.load(disc_path))
 

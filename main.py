@@ -9,6 +9,7 @@ from tensorboardX import SummaryWriter
 from replay_memory import ReplayMemory
 from gym_navigation.envs.navigation import ContinuousNavigation2DEnv
 import cv2
+import os
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
 parser.add_argument('--env-name', default="2d-navigation-v0",
@@ -48,6 +49,8 @@ parser.add_argument('--buffer_size', type=int, default=100000, metavar='N',
                     help='Replay buffer for discriminator')
 parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
+parser.add_argument('--model_path', type=str, default="",
+                    help='pretrained model directory path')
 args = parser.parse_args()
 
 # Environment
@@ -59,10 +62,12 @@ env.seed(args.seed)
 
 # Agent
 agent = SAC(env.observation_space.shape[0], env.action_space, args)
+agent.load_model(env_name=args.env_name)
 
 #TesnorboardX
-writer = SummaryWriter(logdir='runs/{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
-                                                             args.policy, "autotune" if args.automatic_entropy_tuning else ""))
+logdir = 'runs/{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), 
+    args.env_name, args.policy, "autotune" if args.automatic_entropy_tuning else "")
+writer = SummaryWriter(logdir=logdir)
 
 # Memory
 memory = ReplayMemory(args.replay_size)
@@ -183,5 +188,7 @@ for i_episode in itertools.count(1):
         print("Test Episodes: {}, Avg. Reward: {}, Avg. SR: {}".format(episodes, round(avg_reward, 2), round(avg_sr, 2)))
         print("----------------------------------------")
 
+# Save model
+agent.save_model(args.env_name)
 env.close()
 
