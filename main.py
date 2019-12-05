@@ -7,12 +7,12 @@ import torch
 from sac import SAC
 from tensorboardX import SummaryWriter
 from replay_memory import ReplayMemory
-from gym_navigation.envs.navigation import ContinuousNavigation2DEnv
+from gym_navigation.envs.navigation import ContinuousNavigation2DEnv, ContinuousNavigation2DNREnv
 import cv2
 import os
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
-parser.add_argument('--env-name', default="2d-navigation-v0",
+parser.add_argument('--env-name', default="2d-navigation-nr-v0",
                     help='Mujoco Gym environment (default: HalfCheetah-v2)')
 parser.add_argument('--policy', default="Gaussian",
                     help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
@@ -49,8 +49,8 @@ parser.add_argument('--buffer_size', type=int, default=100000, metavar='N',
                     help='Replay buffer for discriminator')
 parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
-parser.add_argument('--model_path', type=str, default="",
-                    help='pretrained model directory path')
+parser.add_argument('--suffix', type=str, default="",
+                    help='suffix for model path')
 args = parser.parse_args()
 
 # Environment
@@ -62,12 +62,15 @@ env.seed(args.seed)
 
 # Agent
 agent = SAC(env.observation_space.shape[0], env.action_space, args)
-agent.load_model(env_name=args.env_name)
+# agent.load_model(env_name=args.env_name)
 
 #TesnorboardX
 logdir = 'runs/{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), 
     args.env_name, args.policy, "autotune" if args.automatic_entropy_tuning else "")
 writer = SummaryWriter(logdir=logdir)
+logdir_img = logdir + '/img'
+if not os.path.exists(logdir_img):
+    os.makedirs(logdir_img)
 
 # Memory
 memory = ReplayMemory(args.replay_size)
@@ -133,23 +136,20 @@ for i_episode in itertools.count(1):
     writer.add_scalar('reward/train', episode_reward, i_episode)
     writer.add_scalar('reward/train_pseudo', episode_sr, i_episode)
     writer.add_scalar('reward/train_all', episode_allr, i_episode)
-    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}, sr: {}, all: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), round(episode_sr, 2), round(episode_allr, 2)))
-
-    # if i_episode > 10:
-    #     disc_loss, disc_loss_old = agent.update_disc(buffer, args.batch_size * 10, steps=50)    
-    # else:        
-    #     disc_loss = 0.
-    #     disc_loss_old = 0.
-    # writer.add_scalar('loss/disc', disc_loss, i_episode)
-    # writer.add_scalar('loss/disc_delta', disc_loss - disc_loss_old, i_episode)
+    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}, sr: {}, all: {}".format(i_episode,
+        total_numsteps, episode_steps, round(episode_reward, 2), round(episode_sr, 2), round(episode_allr, 2)))
 
     if i_episode % 10 == 0 and args.eval == True:
         avg_reward = 0.
         avg_sr = 0.
         avg_all = 0.
+        avg_reward_x = 0.
+        avg_sr_x = 0.
+        avg_all_x = 0.        
         episodes = 20
         context = np.linspace(-1.0, 1.0, num=episodes)
         context = np.expand_dims(context, axis=1)
+        # Using mean for evaluation
         for i  in range(episodes):
             state = env.reset()
             traj = []
@@ -175,20 +175,55 @@ for i_episode in itertools.count(1):
             avg_sr += episode_sr
             avg_all += episode_allr
             img = env._render_trajectory(traj)
-            cv2.imwrite("runs/png/{}-{}.png".format(i, context[i]), img * 255.0)
+            cv2.imwrite("{}/test-{}-{}.png".format(logdir_img, i, context[i]), img * 255.0)
+        # Sample actions for evaluation
+        for i  in range(episodes):
+            state = env.reset()
+            traj = []
+            traj.append([state, None, 0.0, False])
+            episode_reward = 0
+            episode_sr = 0
+            episode_allr = 0
+            done = False
+            
+            while not done:
+                action = agent.select_action(state, context[i], eval=False)
+
+                next_state, reward, done, _ = env.step(action)
+                episode_reward += reward
+                traj.append([next_state, action, reward, done])
+
+                pseudo_reward = agent.pseudo_score(context[i], state)
+                episode_sr += pseudo_reward
+
+                episode_allr += (pseudo_reward + reward)
+                state = next_state
+            avg_reward_x += episode_reward
+            avg_sr_x += episode_sr
+            avg_all_x += episode_allr
+            img = env._render_trajectory(traj)
+            cv2.imwrite("{}/train-{}-{}.png".format(logdir_img, i, context[i]), img * 255.0)
         avg_reward /= episodes
         avg_sr /= episodes
         avg_all /= episodes
-
+        avg_reward_x /= episodes
+        avg_sr_x /= episodes
+        avg_all_x /= episodes
         writer.add_scalar('avg_reward/test', avg_reward, i_episode)
         writer.add_scalar('avg_reward/test_pseudo', avg_sr, i_episode)
         writer.add_scalar('avg_reward/test_all', avg_all, i_episode)
+        writer.add_scalar('avg_reward_x/test', avg_reward_x, i_episode)
+        writer.add_scalar('avg_reward_x/test_pseudo', avg_sr_x, i_episode)
+        writer.add_scalar('avg_reward_x/test_all', avg_all_x, i_episode)
 
         print("----------------------------------------")
         print("Test Episodes: {}, Avg. Reward: {}, Avg. SR: {}".format(episodes, round(avg_reward, 2), round(avg_sr, 2)))
         print("----------------------------------------")
 
+        print("----------------------------------------")
+        print("Test Episodes: {}, Avg. Reward_x: {}, Avg. SR_x: {}".format(episodes, round(avg_reward_x, 2), round(avg_sr_x, 2)))
+        print("----------------------------------------")
 # Save model
-agent.save_model(args.env_name)
+agent.save_model(args.env_name, suffix=args.suffix)
 env.close()
 

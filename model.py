@@ -44,7 +44,7 @@ class Discriminator(nn.Module):
         x = F.relu(self.linear1(state))
         x = F.relu(self.linear2(x))
         x = self.linear3(x)
-        x = 2 * F.tanh(x) # TBD
+        # x = 2 * F.tanh(x) # TBD
 
         return x # score, unnormalized
 
