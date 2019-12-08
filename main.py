@@ -110,8 +110,9 @@ for i_episode in itertools.count(1):
                 updates += 1
 
                 # Reduce the entropy reward gain
-                if updates % 100000 == 0:
-                    agent.adjust_alpha(5.0)
+                # if updates % 100000 == 0:
+                #     agent.adjust_alpha(5.0)
+                agent.adjust_alpha(1.0000046051807898) # reduced to 0.01 times in 1 million steps
 
         next_state, reward, done, _ = env.step(action) # Step
         episode_steps += 1
@@ -143,7 +144,7 @@ for i_episode in itertools.count(1):
     print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}, sr: {}, all: {}".format(i_episode,
         total_numsteps, episode_steps, round(episode_reward, 2), round(episode_sr, 2), round(episode_allr, 2)))
 
-    if i_episode % 10 == 0 and args.eval == True:
+    if i_episode % 50 == 0 and args.eval == True:
         avg_reward = 0.
         avg_sr = 0.
         avg_all = 0.
