@@ -133,6 +133,9 @@ class SAC(object):
 
         return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), disc_loss.item(), alpha_loss.item(), alpha_tlogs.item()
 
+    def adjust_alpha(self, multiplier):
+        self.alpha /= multiplier
+        print("Alpha reduced by {}! To {}.".format(multiplier, self.alpha))
     # Save model parameters
     def save_model(self, env_name, suffix="", actor_path=None, critic_path=None, disc_path=None):
         if not os.path.exists('models/'):
