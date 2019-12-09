@@ -19,16 +19,16 @@ class SAC(object):
 
         self.device = torch.device("cuda" if args.cuda else "cpu") 
 
-        self.critic = QNetwork(num_inputs + 1, action_space.shape[0], args.hidden_size).to(device=self.device)
+        self.critic = QNetwork(num_inputs + args.latent_size, action_space.shape[0], args.hidden_size).to(device=self.device)
         self.critic_optim = Adam(self.critic.parameters(), lr=args.lr)
 
-        self.critic_target = QNetwork(num_inputs + 1, action_space.shape[0], args.hidden_size).to(self.device)
+        self.critic_target = QNetwork(num_inputs + args.latent_size, action_space.shape[0], args.hidden_size).to(self.device)
         hard_update(self.critic_target, self.critic)
 
-        self.disc = Discriminator(num_inputs, args.hidden_size).to(device=self.device)
+        self.disc = Discriminator(num_inputs, args.hidden_size, args.latent_size).to(device=self.device)
         self.disc_optim = Adam(self.disc.parameters(), lr=args.lr/50.)
 
-        self.disc_target = Discriminator(num_inputs, args.hidden_size).to(device=self.device)
+        self.disc_target = Discriminator(num_inputs, args.hidden_size, args.latent_size).to(device=self.device)
         hard_update(self.disc_target, self.disc)
 
         if self.policy_type == "Gaussian":
@@ -38,13 +38,13 @@ class SAC(object):
                 self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
                 self.alpha_optim = Adam([self.log_alpha], lr=args.lr)
 
-            self.policy = GaussianPolicy(num_inputs + 1, action_space.shape[0], args.hidden_size, action_space).to(self.device)
+            self.policy = GaussianPolicy(num_inputs + args.latent_size, action_space.shape[0], args.hidden_size, action_space).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=args.lr)
 
         else:
             self.alpha = 0
             self.automatic_entropy_tuning = False
-            self.policy = DeterministicPolicy(num_inputs + 1, action_space.shape[0], args.hidden_size, action_space).to(self.device)
+            self.policy = DeterministicPolicy(num_inputs + args.latent_size, action_space.shape[0], args.hidden_size, action_space).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=args.lr)
 
     def select_action(self, state, context, eval=False):
@@ -60,10 +60,10 @@ class SAC(object):
         state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
         context = torch.FloatTensor(context).to(self.device).unsqueeze(0)
         mu = self.disc_target(state)
-        score = - torch.pow(context - mu, 2)
+        score = - F.mse_loss(mu, context, reduction='sum')
         # score = - torch.abs(context - mu) # No significant improvement
         
-        return score.detach().cpu().numpy()[0][0]
+        return score.detach().cpu().numpy()
 
     def update_parameters(self, memory, batch_size, updates):
         # Sample a batch from memory
@@ -136,7 +136,7 @@ class SAC(object):
     def adjust_alpha(self, multiplier):
         self.alpha /= multiplier
         # print("Alpha reduced by {}! To {}.".format(multiplier, self.alpha))
-        
+
     # Save model parameters
     def save_model(self, env_name, suffix="", actor_path=None, critic_path=None, disc_path=None):
         if not os.path.exists('models/'):

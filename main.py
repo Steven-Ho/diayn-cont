@@ -37,6 +37,8 @@ parser.add_argument('--num_steps', type=int, default=1000001, metavar='N',
                     help='maximum number of steps (default: 1000000)')
 parser.add_argument('--hidden_size', type=int, default=256, metavar='N',
                     help='hidden size (default: 256)')
+parser.add_argument('--latent_size', type=int, default=2, metavar='N',
+                    help='latent variable length (default: 2)')                    
 parser.add_argument('--updates_per_step', type=int, default=1, metavar='N',
                     help='model updates per simulator step (default: 1)')
 parser.add_argument('--start_steps', type=int, default=10000, metavar='N',
@@ -87,7 +89,7 @@ for i_episode in itertools.count(1):
     done = False
     state = env.reset()
 
-    context = np.random.random(1)
+    context = np.random.random(args.latent_size)
     context = context * 2 - 1. # scale to [-1, 1)
     while not done:
         if args.start_steps > total_numsteps:
@@ -152,8 +154,11 @@ for i_episode in itertools.count(1):
         avg_sr_x = 0.
         avg_all_x = 0.        
         episodes = 20
-        context = np.linspace(-1.0, 1.0, num=episodes)
-        context = np.expand_dims(context, axis=1)
+        # The test part is not compatible with high dimensional latent variables
+        # at this time. An example for the 2D case.
+        c = np.linspace(-1.0, 1.0, num=episodes)
+        context = np.stack([c, c], axis=1)
+        # context = np.expand_dims(context, axis=1)
         # Using mean for evaluation
         for i  in range(episodes):
             state = env.reset()
@@ -180,7 +185,7 @@ for i_episode in itertools.count(1):
             avg_sr += episode_sr
             avg_all += episode_allr
             img = env._render_trajectory(traj)
-            cv2.imwrite("{}/test-{}-{}.png".format(logdir_img, i, context[i]), img * 255.0)
+            cv2.imwrite("{}/test-{}-{}.png".format(logdir_img, i, context[i][0]), img * 255.0)
         # Sample actions for evaluation
         for i  in range(episodes):
             state = env.reset()
@@ -207,7 +212,7 @@ for i_episode in itertools.count(1):
             avg_sr_x += episode_sr
             avg_all_x += episode_allr
             img = env._render_trajectory(traj)
-            cv2.imwrite("{}/train-{}-{}.png".format(logdir_img, i, context[i]), img * 255.0)
+            cv2.imwrite("{}/train-{}-{}.png".format(logdir_img, i, context[i][0]), img * 255.0)
         avg_reward /= episodes
         avg_sr /= episodes
         avg_all /= episodes
