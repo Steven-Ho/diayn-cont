@@ -12,7 +12,7 @@ import cv2
 import os
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
-parser.add_argument('--env-name', default="2d-navigation-nr-v0",
+parser.add_argument('--env-name', default="HalfCheetah-v2",
                     help='Mujoco Gym environment (default: HalfCheetah-v2)')
 parser.add_argument('--policy', default="Gaussian",
                     help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
@@ -24,6 +24,8 @@ parser.add_argument('--tau', type=float, default=0.05, metavar='G',
                     help='target smoothing coefficient(τ) (default: 0.005)')
 parser.add_argument('--lr', type=float, default=0.0003, metavar='G',
                     help='learning rate (default: 0.0003)')
+parser.add_argument('--dclr', type=float, default=0.00001, metavar='G',
+                    help='learning rate of discriminator (default: 0.00001)')
 parser.add_argument('--alpha', type=float, default=0.2, metavar='G',
                     help='Temperature parameter α determines the relative importance of the entropy\
                             term against the reward (default: 0.2)')
@@ -55,6 +57,12 @@ parser.add_argument('--suffix', type=str, default="",
                     help='suffix for model path')
 args = parser.parse_args()
 
+# Built-in config
+bt_conf = dict()
+bt_conf['render'] = False       # The env has '_render_trajectory' method or not
+bt_conf['alpha tuning'] = True  # Scheduled alpha decreasing or not
+bt_conf['include_r'] = False    # Include real reward in training or not
+
 # Environment
 # env = NormalizedActions(gym.make(args.env_name))
 env = gym.make(args.env_name)
@@ -80,6 +88,7 @@ memory = ReplayMemory(args.replay_size)
 # Training Loop
 total_numsteps = 0
 updates = 0
+l_s = args.latent_size
 
 for i_episode in itertools.count(1):
     episode_reward = 0
@@ -89,7 +98,7 @@ for i_episode in itertools.count(1):
     done = False
     state = env.reset()
 
-    context = np.random.random(args.latent_size)
+    context = np.random.random(l_s)
     context = context * 2 - 1. # scale to [-1, 1)
     while not done:
         if args.start_steps > total_numsteps:
@@ -112,9 +121,8 @@ for i_episode in itertools.count(1):
                 updates += 1
 
                 # Reduce the entropy reward gain
-                # if updates % 100000 == 0:
-                #     agent.adjust_alpha(5.0)
-                agent.adjust_alpha(1.0000046051807898) # reduced to 0.01 times in 1 million steps
+                if bt_conf['alpha tuning']:
+                    agent.adjust_alpha(1.0000046051807898) # reduced to 0.01 times in 1 million steps
 
         next_state, reward, done, _ = env.step(action) # Step
         episode_steps += 1
@@ -132,8 +140,11 @@ for i_episode in itertools.count(1):
         # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
         mask = 1 if episode_steps == env._max_episode_steps else float(not done)
 
-        memory.push(context, state, action, all_reward, next_state, mask) # Append transition to memory
-        # buffer.push(state, context)
+        if bt_conf['include_r']:
+            r = all_reward
+        else:
+            r = pseudo_reward
+        memory.push(context, state, action, r, next_state, mask) # Append transition to memory
 
         state = next_state
 
@@ -153,12 +164,12 @@ for i_episode in itertools.count(1):
         avg_reward_x = 0.
         avg_sr_x = 0.
         avg_all_x = 0.        
-        episodes = 20
+        episodes = max(20/l_s, 1)
         # The test part is not compatible with high dimensional latent variables
         # at this time. An example for the 2D case.
         c = np.linspace(-1.0, 1.0, num=episodes)
-        context = np.stack([c, c], axis=1)
-        # context = np.expand_dims(context, axis=1)
+        context = np.stack([c for _ in range(l_s)], axis=1)
+
         # Using mean for evaluation
         for i  in range(episodes):
             state = env.reset()
@@ -184,8 +195,10 @@ for i_episode in itertools.count(1):
             avg_reward += episode_reward
             avg_sr += episode_sr
             avg_all += episode_allr
-            img = env._render_trajectory(traj)
-            cv2.imwrite("{}/test-{}-{}.png".format(logdir_img, i, context[i][0]), img * 255.0)
+            if bt_conf['render']:
+                img = env._render_trajectory(traj)
+                cv2.imwrite("{}/test-{}-{}.png".format(logdir_img, i, context[i][0]), img * 255.0)
+
         # Sample actions for evaluation
         for i  in range(episodes):
             state = env.reset()
@@ -211,8 +224,9 @@ for i_episode in itertools.count(1):
             avg_reward_x += episode_reward
             avg_sr_x += episode_sr
             avg_all_x += episode_allr
-            img = env._render_trajectory(traj)
-            cv2.imwrite("{}/train-{}-{}.png".format(logdir_img, i, context[i][0]), img * 255.0)
+            if bt_conf['render']:
+                img = env._render_trajectory(traj)
+                cv2.imwrite("{}/train-{}-{}.png".format(logdir_img, i, context[i][0]), img * 255.0)
         avg_reward /= episodes
         avg_sr /= episodes
         avg_all /= episodes

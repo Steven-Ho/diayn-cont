@@ -26,7 +26,7 @@ class SAC(object):
         hard_update(self.critic_target, self.critic)
 
         self.disc = Discriminator(num_inputs, args.hidden_size, args.latent_size).to(device=self.device)
-        self.disc_optim = Adam(self.disc.parameters(), lr=args.lr/50.)
+        self.disc_optim = Adam(self.disc.parameters(), lr=args.dclr)
 
         self.disc_target = Discriminator(num_inputs, args.hidden_size, args.latent_size).to(device=self.device)
         hard_update(self.disc_target, self.disc)
