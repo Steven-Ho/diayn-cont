@@ -7,7 +7,7 @@ import torch
 from sac import SAC
 from tensorboardX import SummaryWriter
 from replay_memory import ReplayMemory
-from gym_navigation.envs.navigation import ContinuousNavigation2DEnv, ContinuousNavigation2DNREnv
+# from gym_navigation.envs.navigation import ContinuousNavigation2DEnv, ContinuousNavigation2DNREnv
 import cv2
 import os
 
