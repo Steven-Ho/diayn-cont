@@ -8,8 +8,8 @@ DIAYN is a variational approach for reinforcement learning aiming to discover di
 
 This project is another version of DIAYN but different on these two aspects:
 
-..* The latent space is continuous, and the prior is a uniform distribution over [-1, 1].
-..* The algorithm is implemented on PyTorch and Gym.
+1. The latent space is continuous, and the prior is a uniform distribution over [-1, 1].
+2. The algorithm is implemented on PyTorch and Gym.
 
 With a continuous latent space, DIAYN may learn a spectrum of policies rather than several independent skills. Besides, this project gets rid of rllab, which is not under maintaining.
 
