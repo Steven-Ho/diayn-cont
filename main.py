@@ -5,6 +5,7 @@ import numpy as np
 import itertools
 import torch
 from sac import SAC
+from dctrain import DiscOptimizer
 from tensorboardX import SummaryWriter
 from replay_memory import ReplayMemory
 # from gym_navigation.envs.navigation import ContinuousNavigation2DEnv, ContinuousNavigation2DNREnv
@@ -72,6 +73,7 @@ env.seed(args.seed)
 
 # Agent
 agent = SAC(env.observation_space.shape[0], env.action_space, args)
+dc = DiscOptimizer(env.observation_space.shape[0], args)
 # agent.load_model(env_name=args.env_name)
 
 #TesnorboardX
@@ -110,7 +112,8 @@ for i_episode in itertools.count(1):
             # Number of updates per step in environment
             for i in range(args.updates_per_step):
                 # Update parameters of all the networks
-                critic_1_loss, critic_2_loss, policy_loss, disc_loss, ent_loss, alpha = agent.update_parameters(memory, args.batch_size, updates)
+                critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = agent.update_parameters(memory, args.batch_size, updates)
+                disc_loss = dc.update_parameters(memory, args.batch_size, updates)
 
                 writer.add_scalar('loss/disc', disc_loss, updates)
                 writer.add_scalar('loss/critic_1', critic_1_loss, updates)
@@ -129,7 +132,7 @@ for i_episode in itertools.count(1):
         total_numsteps += 1
         episode_reward += reward
 
-        pseudo_reward = agent.pseudo_score(context, state)
+        pseudo_reward = dc.pseudo_score(context, state)
 
         episode_sr += pseudo_reward
 
@@ -187,7 +190,7 @@ for i_episode in itertools.count(1):
                 episode_reward += reward
                 traj.append([next_state, action, reward, done])
 
-                pseudo_reward = agent.pseudo_score(context[i], state)
+                pseudo_reward = dc.pseudo_score(context[i], state)
                 episode_sr += pseudo_reward
 
                 episode_allr += (pseudo_reward + reward)
@@ -216,7 +219,7 @@ for i_episode in itertools.count(1):
                 episode_reward += reward
                 traj.append([next_state, action, reward, done])
 
-                pseudo_reward = agent.pseudo_score(context[i], state)
+                pseudo_reward = dc.pseudo_score(context[i], state)
                 episode_sr += pseudo_reward
 
                 episode_allr += (pseudo_reward + reward)
@@ -249,5 +252,6 @@ for i_episode in itertools.count(1):
         print("----------------------------------------")
 # Save model
 agent.save_model(args.env_name, suffix=args.suffix)
+dc.save_model(args.env_name, suffix=args.suffix)
 env.close()
 

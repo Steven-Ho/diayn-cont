@@ -25,12 +25,6 @@ class SAC(object):
         self.critic_target = QNetwork(num_inputs + args.latent_size, action_space.shape[0], args.hidden_size).to(self.device)
         hard_update(self.critic_target, self.critic)
 
-        self.disc = Discriminator(num_inputs, args.hidden_size, args.latent_size).to(device=self.device)
-        self.disc_optim = Adam(self.disc.parameters(), lr=args.dclr)
-
-        self.disc_target = Discriminator(num_inputs, args.hidden_size, args.latent_size).to(device=self.device)
-        hard_update(self.disc_target, self.disc)
-
         if self.policy_type == "Gaussian":
             # Target Entropy = −dim(A) (e.g. , -6 for HalfCheetah-v2) as given in the paper
             if self.automatic_entropy_tuning == True:
@@ -55,15 +49,6 @@ class SAC(object):
         else:
             _, _, action = self.policy.sample(state, context)
         return action.detach().cpu().numpy()[0]
-
-    def pseudo_score(self, context, state):
-        state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
-        context = torch.FloatTensor(context).to(self.device).unsqueeze(0)
-        mu = self.disc_target(state)
-        score = - F.mse_loss(mu, context, reduction='sum')
-        # score = - torch.abs(context - mu) # No significant improvement
-        
-        return score.detach().cpu().numpy()
 
     def update_parameters(self, memory, batch_size, updates):
         # Sample a batch from memory
@@ -93,14 +78,6 @@ class SAC(object):
 
         policy_loss = ((self.alpha * log_pi) - min_qf_pi).mean() # Jπ = 𝔼st∼D,εt∼N[α * logπ(f(εt;st)|st) − Q(st,f(εt;st))]
 
-        prediction = self.disc(state_batch)
-        disc_loss = F.mse_loss(prediction, context_batch)
-        # disc_loss = F.l1_loss(prediction, context_batch) # No significant improvement
-
-        self.disc_optim.zero_grad()
-        disc_loss.backward()
-        self.disc_optim.step()
-
         self.critic_optim.zero_grad()
         qf1_loss.backward()
         self.critic_optim.step()
@@ -129,16 +106,15 @@ class SAC(object):
 
         if updates % self.target_update_interval == 0:
             soft_update(self.critic_target, self.critic, self.tau)
-            soft_update(self.disc_target, self.disc, self.tau)
 
-        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), disc_loss.item(), alpha_loss.item(), alpha_tlogs.item()
+        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
 
     def adjust_alpha(self, multiplier):
         self.alpha /= multiplier
         # print("Alpha reduced by {}! To {}.".format(multiplier, self.alpha))
 
     # Save model parameters
-    def save_model(self, env_name, suffix="", actor_path=None, critic_path=None, disc_path=None):
+    def save_model(self, env_name, suffix="", actor_path=None, critic_path=None):
         if not os.path.exists('models/'):
             os.makedirs('models/')
 
@@ -146,16 +122,14 @@ class SAC(object):
             actor_path = "models/sac_actor_{}_{}".format(env_name, suffix)
         if critic_path is None:
             critic_path = "models/sac_critic_{}_{}".format(env_name, suffix)
-        if disc_path is None:
-            disc_path = "models/disc_{}_{}".format(env_name, suffix) 
-        print('Saving models to {}, {} and {}'.format(actor_path, critic_path, disc_path))
+
+        print('Saving models to {} and {}'.format(actor_path, critic_path))
         torch.save(self.policy.state_dict(), actor_path)
         torch.save(self.critic.state_dict(), critic_path)
-        torch.save(self.disc.state_dict(), disc_path)
     
     # Load model parameters
-    def load_model(self, actor_path=None, critic_path=None, disc_path=None, env_name=None, suffix=""):
-        print('Loading models from {}, {} and {}'.format(actor_path, critic_path, disc_path))
+    def load_model(self, actor_path=None, critic_path=None, env_name=None, suffix=""):
+        print('Loading models from {} and {}'.format(actor_path, critic_path))
         if actor_path is not None:
             self.policy.load_state_dict(torch.load(actor_path))
         elif env_name is not None:
@@ -166,9 +140,5 @@ class SAC(object):
         elif env_name is not None:
             critic_path = "models/sac_critic_{}_{}".format(env_name, suffix)
             self.critic.load_state_dict(torch.load(critic_path))
-        if disc_path is not None:
-            self.disc.load_state_dict(torch.load(disc_path))
-        elif env_name is not None:
-            disc_path = "models/disc_{}_{}".format(env_name, suffix) 
-            self.disc.load_state_dict(torch.load(disc_path))
+
 
