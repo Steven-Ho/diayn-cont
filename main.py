@@ -164,14 +164,14 @@ for i_episode in itertools.count(1):
         avg_reward_x = 0.
         avg_sr_x = 0.
         avg_all_x = 0.        
-        episodes = max(20/l_s, 1)
+        episodes = 20
         # The test part is not compatible with high dimensional latent variables
         # at this time. An example for the 2D case.
         c = np.linspace(-1.0, 1.0, num=episodes)
         context = np.stack([c for _ in range(l_s)], axis=1)
 
         # Using mean for evaluation
-        for i  in range(episodes):
+        for i in range(episodes):
             state = env.reset()
             traj = []
             traj.append([state, None, 0.0, False])
