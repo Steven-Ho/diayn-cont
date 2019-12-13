@@ -20,3 +20,23 @@ class ReplayMemory:
 
     def __len__(self):
         return len(self.buffer)
+
+class ReplayMemoryDisc:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.buffer = []
+        self.position = 0
+
+    def push(self, context, obs):
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+        self.buffer[self.position] = (context, obs) # obs can be anything, including one step state, final state or trajectory
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size):
+        batch = random.sample(self.buffer, batch_size)
+        context, obs = map(np.stack, zip(*batch))
+        return context, obs
+
+    def __len__(self):
+        return len(self.buffer)

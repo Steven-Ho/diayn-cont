@@ -46,7 +46,24 @@ class Discriminator(nn.Module):
         x = self.linear3(x)
         # x = 2 * F.tanh(x) # TBD
 
-        return x # score, unnormalized
+        return x # regression label, unnormalized
+
+# A discriminator for trajectories
+class DiscriminatorT(nn.Module):
+    def __init__(self, num_inputs, hidden_dim, num_outputs):
+        super(DiscriminatorT, self).__init__()
+
+        self.lstm = nn.LSTM(input_size=num_inputs, hidden_size=hidden_dim, batch_first=True, bidirectional=True)
+        self.linear = nn.Linear(hidden_dim, num_outputs)
+        
+        self.apply(weights_init_)
+
+    def forward(self, seq):
+        x, _ = self.lstm(seq)
+        x = self.linear(x)
+        x = torch.mean(x, dim=1) # average over all sample points on one trajectory
+
+        return x
 
 class QNetwork(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_dim):
