@@ -248,6 +248,8 @@ for i_episode in itertools.count(1):
         print("----------------------------------------")
         print("Test Episodes: {}, Avg. Reward_x: {}, Avg. SR_x: {}".format(episodes, round(avg_reward_x, 2), round(avg_sr_x, 2)))
         print("----------------------------------------")
+
+        print("Current Time: {}".format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")))
 # Save model
 agent.save_model(args.env_name, suffix=args.suffix)
 dc.save_model(args.env_name, suffix=args.suffix)
