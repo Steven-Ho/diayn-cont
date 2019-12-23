@@ -8,7 +8,7 @@ from sac import SAC
 from dctrain import DiscOptimizer
 from tensorboardX import SummaryWriter
 from replay_memory import ReplayMemory
-# from gym_navigation.envs.navigation import ContinuousNavigation2DEnv, ContinuousNavigation2DNREnv
+from gym_navigation.envs.navigation import ContinuousNavigation2DEnv, ContinuousNavigation2DNREnv
 import cv2
 import os
 
@@ -58,7 +58,7 @@ args = parser.parse_args()
 
 # Built-in config
 bt_conf = dict()
-bt_conf['render'] = False       # The env has '_render_trajectory' method or not
+bt_conf['render'] = True       # The env has '_render_trajectory' method or not
 bt_conf['alpha tuning'] = True  # Scheduled alpha decreasing or not
 bt_conf['include_r'] = False    # Include real reward in training or not
 
@@ -98,8 +98,9 @@ for i_episode in itertools.count(1):
     done = False
     state = env.reset()
 
+    scale_factor = 1
     context = np.random.random(l_s)
-    context = context * 2 - 1. # scale to [-1, 1)
+    context = context * 2 * scale_factor - scale_factor # scale to [-a, a)
     while not done:
         if args.start_steps > total_numsteps:
             action = env.action_space.sample()  # Sample random action
@@ -123,7 +124,8 @@ for i_episode in itertools.count(1):
 
                 # Reduce the entropy reward gain
                 if bt_conf['alpha tuning']:
-                    agent.adjust_alpha(1.0000046051807898) # reduced to 0.01 times in 1 million steps
+                    if updates < 1000000:
+                        agent.adjust_alpha(1.0000046051807898) # reduced to 0.01 times in 1 million steps
 
         next_state, reward, done, _ = env.step(action) # Step
         episode_steps += 1
@@ -158,7 +160,7 @@ for i_episode in itertools.count(1):
     print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}, sr: {}, all: {}".format(i_episode,
         total_numsteps, episode_steps, round(episode_reward, 2), round(episode_sr, 2), round(episode_allr, 2)))
 
-    if i_episode % 50 == 0 and args.eval == True:
+    if i_episode % 100 == 0 and args.eval == True:
         avg_reward = 0.
         avg_sr = 0.
         avg_all = 0.
@@ -168,7 +170,7 @@ for i_episode in itertools.count(1):
         episodes = 20
         # The test part is not compatible with high dimensional latent variables
         # at this time. An example for the 2D case.
-        c = np.linspace(-1.0, 1.0, num=episodes)
+        c = np.linspace(-1.0, 1.0, num=episodes) * scale_factor
         context = np.stack([c for _ in range(l_s)], axis=1)
 
         # Using mean for evaluation
@@ -198,7 +200,7 @@ for i_episode in itertools.count(1):
             avg_all += episode_allr
             if bt_conf['render']:
                 img = env._render_trajectory(traj)
-                cv2.imwrite("{}/test-{}-{}.png".format(logdir_img, i, context[i][0]), img * 255.0)
+                cv2.imwrite("{}/test-{}-{}-{}.png".format(logdir_img, i, context[i][0], scale_factor), img * 255.0)
 
         # Sample actions for evaluation
         for i  in range(episodes):
@@ -227,7 +229,7 @@ for i_episode in itertools.count(1):
             avg_all_x += episode_allr
             if bt_conf['render']:
                 img = env._render_trajectory(traj)
-                cv2.imwrite("{}/train-{}-{}.png".format(logdir_img, i, context[i][0]), img * 255.0)
+                cv2.imwrite("{}/train-{}-{}-{}.png".format(logdir_img, i, context[i][0], scale_factor), img * 255.0)
         avg_reward /= episodes
         avg_sr /= episodes
         avg_all /= episodes
@@ -244,12 +246,10 @@ for i_episode in itertools.count(1):
         print("----------------------------------------")
         print("Test Episodes: {}, Avg. Reward: {}, Avg. SR: {}".format(episodes, round(avg_reward, 2), round(avg_sr, 2)))
         print("----------------------------------------")
-
-        print("----------------------------------------")
         print("Test Episodes: {}, Avg. Reward_x: {}, Avg. SR_x: {}".format(episodes, round(avg_reward_x, 2), round(avg_sr_x, 2)))
         print("----------------------------------------")
-
         print("Current Time: {}".format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")))
+        print("----------------------------------------")
 # Save model
 agent.save_model(args.env_name, suffix=args.suffix)
 dc.save_model(args.env_name, suffix=args.suffix)
