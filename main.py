@@ -13,7 +13,7 @@ import cv2
 import os
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
-parser.add_argument('--env-name', default="HalfCheetah-v2",
+parser.add_argument('--env-name', default="2d-navigation-v0",
                     help='Mujoco Gym environment (default: HalfCheetah-v2)')
 parser.add_argument('--policy', default="Gaussian",
                     help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
@@ -60,8 +60,8 @@ args = parser.parse_args()
 bt_conf = dict()
 bt_conf['render'] = True       # The env has '_render_trajectory' method or not
 bt_conf['alpha tuning'] = True  # Scheduled alpha decreasing or not
-bt_conf['include_r'] = False    # Include real reward in training or not
-
+bt_conf['include_r'] = True    # Include real reward in training or not
+bt_conf['include_sr'] = False    # Include pseudo reward in training or not
 # Environment
 # env = NormalizedActions(gym.make(args.env_name))
 env = gym.make(args.env_name)
@@ -143,10 +143,11 @@ for i_episode in itertools.count(1):
         # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
         mask = 1 if episode_steps == env._max_episode_steps else float(not done)
 
+        r = 0.
         if bt_conf['include_r']:
-            r = all_reward
-        else:
-            r = pseudo_reward
+            r += reward
+        if bt_conf['include_sr']:
+            r += pseudo_reward
         memory.push((context, state, action, r, next_state, mask)) # Append transition to memory
 
         state = next_state
